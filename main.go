@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"net"
@@ -14,6 +15,21 @@ import (
 type ChannelRow struct {
 	id int32
 	serial string
+}
+
+const (
+	port = "0.0.0.0:3334"
+	sleepTime = 3600
+	sqlUrl = "postgresql://admin@localhost:5432/youtube?sslmode=disable"
+	sqlQuery = "SELECT id, serial FROM youtube.stats.channels ORDER BY id ASC"
+)
+
+var (
+	rows []ChannelRow
+)
+
+func getRandomRows(limit uint32) []ChannelRow {
+
 }
 
 func handleConnection(c net.Conn) {
@@ -32,7 +48,15 @@ func handleConnection(c net.Conn) {
 		os.Exit(7)
 	}
 
+	if n != 4 {
+		fmt.Println("Need to read 4 bytes - received", n)
+		return
+	}
+
 	fmt.Println("Retrieved", n, "bytes")
+	limit := binary.LittleEndian.Uint32(bytes)
+	fmt.Println("Limit is", limit)
+
 	{
 		message := "Hello\n"
 		_, err := c.Write([]byte(message))
@@ -44,17 +68,6 @@ func handleConnection(c net.Conn) {
 		}
 	}
 }
-
-const (
-	port = "0.0.0.0:3334"
-	sleepTime = 3600
-	sqlUrl = "postgresql://admin@localhost:5432/youtube?sslmode=disable"
-	sqlQuery = "SELECT id, serial FROM youtube.stats.channels ORDER BY id ASC"
-)
-
-var (
-	rows []ChannelRow
-)
 
 func setChannels() {
 	fmt.Println("Updating channels")
