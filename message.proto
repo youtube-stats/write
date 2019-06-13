@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package message;
+
+message ChannelMessage {
+    repeated int32 ids = 1;
+    repeated string serials = 2;
+}
