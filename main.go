@@ -60,6 +60,8 @@ func getRandomRows(limit int) []byte {
 		protoMsg.Serials = append(protoMsg.Serials, rows[i].serial)
 	}
 
+	fmt.Println("Sending", protoMsg)
+
 	data, err := proto.Marshal(&protoMsg)
 	if err != nil {
 		fmt.Println(err)
