@@ -116,7 +116,7 @@ func init() {
 	status = make([]bool, length)
 	{
 		for i := LengthType(0); i < length; i++ {
-			status = append(status, checkKey(keys[i]))
+			status[i] = checkKey(keys[i])
 		}
 	}
 }
