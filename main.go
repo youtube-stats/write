@@ -1,34 +1,31 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
 func handleConnection(c net.Conn) {
 	fmt.Printf("Serving %s\n", c.RemoteAddr().String())
-	for {
-		netData, err := bufio.NewReader(c).ReadString('\n')
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		temp := strings.TrimSpace(string(netData))
-		if temp == "STOP" {
-			break
-		}
-
+	{
 		result := "hello\n"
-		c.Write([]byte(string(result)))
+		_, err := c.Write([]byte(string(result)))
+		{
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(4)
+			}
+		}
 	}
-	c.Close()
+	err := c.Close()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(4)
+	}
 }
 
 const (
@@ -39,14 +36,11 @@ const (
 func checkKey(key string) bool {
 	url := fmt.Sprintf(google, key)
 	resp, err := http.Head(url)
-	{
-		if err != nil {
-			fmt.Println(key, err)
-			return false
-		}
+	if err != nil {
+		fmt.Println(key, err)
+		return false
 	}
 
-	fmt.Println()
 	status := resp.StatusCode == http.StatusOK
 	{
 		if status {
@@ -82,6 +76,11 @@ func main() {
 				keys = append(keys, key)
 			}
 		}
+
+		if len(keys) == 0 {
+			fmt.Println("No good keys")
+			os.Exit(5)
+		}
 	}
 
 	server, err := net.Listen("tcp4", port)
@@ -97,6 +96,7 @@ func main() {
 	}()
 
 	for {
+		fmt.Println("Waiting for connection")
 		connection, err := server.Accept()
 		if err != nil {
 			fmt.Println(err)
