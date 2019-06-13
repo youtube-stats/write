@@ -1,9 +1,11 @@
 package main
 
 import (
+	"./message"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"math/rand"
 	"net"
 	"os"
@@ -28,8 +30,42 @@ var (
 	rows []ChannelRow
 )
 
-func getRandomRows(limit uint32) []ChannelRow {
+func getRandomRows(limit int) []byte {
+	var top int
+	if limit > len(rows) {
+		top = len(rows)
+	}
 
+	n := 50
+	// record indexes here to prevent duplicates
+	indexes := make(map[int]bool)
+
+	// create n random indexes
+	for i := 0; i < n; i++ {
+		var r int
+		for {
+			r = rand.Intn(top)
+			if indexes[r] {
+				continue
+			}
+			break
+		}
+
+		indexes[r] = true
+	}
+
+	var protoMsg message.ChannelMessage
+	for i := range indexes {
+		protoMsg.Ids = append(protoMsg.Ids, rows[i].id)
+		protoMsg.Serials = append(protoMsg.Serials, rows[i].serial)
+	}
+
+	data, err := proto.Marshal(&protoMsg)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return data
 }
 
 func handleConnection(c net.Conn) {
@@ -54,12 +90,12 @@ func handleConnection(c net.Conn) {
 	}
 
 	fmt.Println("Retrieved", n, "bytes")
-	limit := binary.LittleEndian.Uint32(bytes)
+	limit := int(binary.LittleEndian.Uint32(bytes))
 	fmt.Println("Limit is", limit)
 
+	protoBytes := getRandomRows(limit)
 	{
-		message := "Hello\n"
-		_, err := c.Write([]byte(message))
+		_, err := c.Write(protoBytes)
 		{
 			if err != nil {
 				fmt.Println(err)
