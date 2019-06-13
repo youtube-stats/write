@@ -1,13 +1,20 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"math/rand"
 	"net"
-	"net/http"
 	"os"
 	"time"
+
+	_ "github.com/lib/pq"
 )
+
+type ChannelRow struct {
+	id int32
+	serial [24]byte
+}
 
 func handleConnection(c net.Conn) {
 	defer func() {
@@ -18,10 +25,17 @@ func handleConnection(c net.Conn) {
 		}
 	}()
 
-	key := getRandomKey()
-	fmt.Println("Serving", c.RemoteAddr().String(), key)
+	bytes := make([]byte, 4)
+	n, err := c.Read(bytes)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(7)
+	}
+
+	fmt.Println("Retrieved", n, "bytes")
 	{
-		_, err := c.Write([]byte(key))
+		message := "Hello\n"
+		_, err := c.Write([]byte(message))
 		{
 			if err != nil {
 				fmt.Println(err)
@@ -31,90 +45,67 @@ func handleConnection(c net.Conn) {
 	}
 }
 
-type LengthType = uint8
-
 const (
-	port = "0.0.0.0:3333"
-	sleepTime = 60
-	google = "https://www.googleapis.com/youtube/v3/channels?part=id&id=UC-lHJZR3Gqxm24_Vd_AJ5Yw&key=%s"
+	port = "0.0.0.0:3334"
+	sleepTime = 3600
+	sqlUrl = "postgresql://admin@localhost:5432/youtube?sslmode=disable"
+	sqlQuery = "SELECT id, serial FROM youtube.stats.channels ORDER BY id ASC"
 )
 
 var (
-	keys []string
-	status []bool
-	length LengthType
+	rows []ChannelRow
 )
 
-func checkKey(key string) bool {
-	url := fmt.Sprintf(google, key)
-	resp, err := http.Head(url)
+func setChannels() {
+	fmt.Println("Updating channels")
+
+	db, err := sql.Open("postgres", sqlUrl)
 	if err != nil {
-		fmt.Println(key, err)
-		return false
+		fmt.Println(err)
+		os.Exit(5)
 	}
 
-	status := resp.StatusCode == http.StatusOK
-	{
-		if status {
-			fmt.Println(key, "Good")
-		} else {
-			fmt.Println(key, "Bad")
-		}
-	}
+	defer func() {
+		fmt.Println("Closing sql connection")
+		_ = db.Close()
+	}()
 
-	return status
-}
-
-func keyAudit() {
-	fmt.Println("Key audit started")
-
-	for {
-		for i := LengthType(0); i < length; i++ {
-			time.Sleep(sleepTime * time.Second)
-			status[i] = checkKey(keys[i])
-		}
-	}
-}
-
-func getRandomKey() string {
-	goodKeys := make([]string, 0)
-	for i := LengthType(0); i < length; i++ {
-		if status[i] {
-			goodKeys = append(goodKeys, keys[i])
-		}
-	}
-
-	if len(goodKeys) == 0 {
-		fmt.Println("No good keys right now")
+	results, err := db.Query(sqlQuery)
+	if err != nil {
+		fmt.Println(err)
 		os.Exit(6)
 	}
 
-	n := rand.Intn(len(goodKeys))
+	tmp := make([]ChannelRow, 0)
+	var row ChannelRow
 
-	return goodKeys[n]
+	for results.Next() {
+		err := results.Scan(row)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(7)
+		}
+
+		tmp = append(tmp, row)
+	}
+
+	fmt.Println("Retrieved", len(tmp), "channels")
+	rows = tmp
+}
+
+func channelUpdate() {
+	for {
+		fmt.Println("Waiting for", sleepTime, "seconds")
+		time.Sleep(sleepTime * time.Second)
+		setChannels()
+	}
 }
 
 func init() {
-	fmt.Println("Key service started")
+	fmt.Println("Cache service started")
 	rand.Seed(time.Now().Unix())
 
-	keys = os.Args[1:]
-	length = LengthType(len(keys))
-	{
-		if length == 0 {
-			fmt.Println("No keys")
-			os.Exit(1)
-		}
-
-		fmt.Println("Received", keys)
-	}
-
-	status = make([]bool, length)
-	{
-		for i := LengthType(0); i < length; i++ {
-			status[i] = checkKey(keys[i])
-		}
-	}
+	setChannels()
 }
 
 func main() {
@@ -129,7 +120,8 @@ func main() {
 	defer func() {
 		_ = server.Close()
 	}()
-	go keyAudit()
+
+	go channelUpdate()
 
 	for {
 		fmt.Println("Waiting for connection")
