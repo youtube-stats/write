@@ -71,11 +71,7 @@ func keyAudit() {
 	for {
 		for i := LengthType(0); i < length; i++ {
 			time.Sleep(sleepTime * time.Second)
-			key := keys[i]
-			cond := checkKey(key)
-
-			fmt.Println(key, cond)
-			status[i] = cond
+			status[i] = checkKey(keys[i])
 		}
 	}
 }
