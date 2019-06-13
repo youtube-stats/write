@@ -24,14 +24,16 @@ const (
 	sqlUrl = "postgresql://admin@localhost:5432/youtube?sslmode=disable"
 	sqlInsert = "INSERT INTO youtube.stats.channels (time, id, subs) VALUE ($1, $2, $3)"
 	cacheSize = 1000
+	readSize = 2000
 )
 
 var (
 	cache []ChannelRow
+	pipe chan message.ChannelMessage
 )
 
 func handleConnection(c net.Conn) {
-	var bytes []byte
+	bytes := make([]byte, readSize)
 	{
 		{
 			n, err := c.Read(bytes)
@@ -41,6 +43,9 @@ func handleConnection(c net.Conn) {
 			}
 
 			fmt.Println("Retrieved", n, "bytes")
+			if n < readSize {
+				bytes = bytes[:n]
+			}
 		}
 
 		{
@@ -52,22 +57,36 @@ func handleConnection(c net.Conn) {
 		}
 	}
 
-	msg := &message.ChannelMessage{}
+	var msg message.ChannelMessage
 	{
-		err := proto.Unmarshal(bytes, msg)
+		err := proto.Unmarshal(bytes, &msg)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Protobuf parsing error:", err)
 			return
 		}
 	}
 
-	for i := 0; i < len(msg.Ids); i++ {
-		time := time.Now()
-		id := msg.Ids[i]
-		sub := msg.Subs[i]
+	pipe <- msg
+}
 
-		row := ChannelRow{time, id, sub}
-		cache = append(cache, row)
+func msgHandler() {
+	for {
+		fmt.Println("Waiting for message")
+		msg := <- pipe
+
+		fmt.Println("Received", msg)
+		for i := 0; i < len(msg.Ids); i++ {
+			time := time.Now()
+			id := msg.Ids[i]
+			sub := msg.Subs[i]
+
+			row := ChannelRow{time, id, sub}
+			cache = append(cache, row)
+		}
+
+		if len(cache) >= cacheSize {
+			write()
+		}
 	}
 }
 
