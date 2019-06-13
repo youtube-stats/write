@@ -13,7 +13,7 @@ import (
 
 type ChannelRow struct {
 	id int32
-	serial [24]byte
+	serial string
 }
 
 func handleConnection(c net.Conn) {
@@ -80,12 +80,11 @@ func setChannels() {
 	var row ChannelRow
 
 	for results.Next() {
-		err := results.Scan(row)
+		err := results.Scan(&row.id, &row.serial)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(7)
 		}
-
 		tmp = append(tmp, row)
 	}
 
@@ -95,7 +94,7 @@ func setChannels() {
 
 func channelUpdate() {
 	for {
-		fmt.Println("Waiting for", sleepTime, "seconds")
+		fmt.Println("Waiting for", sleepTime, "seconds until repulling channels")
 		time.Sleep(sleepTime * time.Second)
 		setChannels()
 	}
